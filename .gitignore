@@ -1,0 +1,38 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+*.venv
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local app data and databases
+chroma_data/
+**/chroma_data/
+*.sqlite3
+*.db
+*.log
