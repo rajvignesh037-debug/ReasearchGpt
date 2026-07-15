@@ -1,0 +1,7 @@
+pdfplumber>=0.11.0
+openai>=1.54.4
+python-dotenv>=1.0.1
+chromadb>=0.5.20
+fastapi>=0.115.5
+uvicorn>=0.32.1
+python-multipart>=0.0.17
