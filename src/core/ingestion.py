@@ -8,9 +8,12 @@ This module has no external dependencies beyond pdfplumber - no API keys,
 no vector DB, no network calls. Test it standalone before moving to Phase 2.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import pdfplumber
 
@@ -111,6 +114,62 @@ def process_pdf(pdf_path: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUN
             chunk_index += 1
 
     return all_chunks
+
+
+def batch_ingest_folder(folder_path: str = "data", vector_db: Optional[Any] = None) -> Dict[str, Any]:
+    """Scan a folder for PDFs, ingest new ones, and skip previously ingested files."""
+    folder = Path(folder_path)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = folder / ".ingested_manifest.json"
+    manifest: Dict[str, Dict[str, str]] = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError:
+            manifest = {}
+
+    if vector_db is None:
+        from core.vector_db import VectorDB
+
+        vector_db = VectorDB()
+
+    ingested_files: List[str] = []
+    skipped_files: List[str] = []
+    failed_files: List[Dict[str, str]] = []
+
+    for pdf_path in sorted(folder.glob("*.pdf")):
+        try:
+            file_hash = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+            previous_record = manifest.get(pdf_path.name)
+            if previous_record and previous_record.get("hash") == file_hash:
+                skipped_files.append(pdf_path.name)
+                continue
+
+            chunks = process_pdf(str(pdf_path))
+            if not chunks:
+                raise ValueError(f"No extractable text found in {pdf_path.name}")
+
+            from core.embeddings import embed_chunks
+
+            embedded = embed_chunks(chunks)
+            vector_db.add_chunks(embedded)
+
+            manifest[pdf_path.name] = {
+                "hash": file_hash,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            ingested_files.append(pdf_path.name)
+        except Exception as exc:
+            failed_files.append({"file": pdf_path.name, "error": str(exc)})
+
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    return {
+        "ingested_files": ingested_files,
+        "skipped_files": skipped_files,
+        "failed_files": failed_files,
+    }
 
 
 if __name__ == "__main__":

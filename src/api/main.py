@@ -32,7 +32,6 @@ from api.schemas import (
     HealthResponse,
     QueryRequest,
     QueryResponse,
-    UploadResponse,
 )
 
 app = FastAPI(title="Research Paper RAG API", version="0.1.0")
@@ -54,32 +53,33 @@ def health():
     return HealthResponse(status="ok", chunks_stored=pipeline.document_count())
 
 
-@app.post("/upload", response_model=UploadResponse)
+@app.post("/upload")
 def upload(file: UploadFile = File(...)):
-    """
-    Accept a PDF, run it through ingestion -> embedding -> storage, and
-    return stats. This blocks until processing finishes (sync, see module docstring).
-    """
+    """Persist an uploaded PDF to data/ and ingest any new PDFs from that folder."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="A filename is required.")
+
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    # Save the upload to a temp file since ingestion.py expects a filesystem path.
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
+    data_dir = Path("data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    destination_path = data_dir / Path(file.filename).name
 
     try:
-        result = pipeline.ingest_document(tmp_path)
-    except ValueError as e:
-        # e.g. scanned/image-only PDF with no extractable text
-        raise HTTPException(status_code=422, detail=str(e))
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
+        with destination_path.open("wb") as destination_file:
+            shutil.copyfileobj(file.file, destination_file)
 
-    return UploadResponse(
-        source=file.filename,  # use the real uploaded filename, not the temp path
-        chunks_created=result.chunks_created,
-        pages_processed=result.pages_processed,
+        summary = pipeline.ingest_folder("data")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "source": file.filename,
+            "summary": summary,
+        },
     )
 
 

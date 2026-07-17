@@ -36,3 +36,6 @@ chroma_data/
 *.sqlite3
 *.db
 *.log
+
+data/*
+!data/.gitkeep

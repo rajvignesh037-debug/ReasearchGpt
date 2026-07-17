@@ -10,7 +10,7 @@ OpenAI directly.
 from dataclasses import dataclass
 from typing import List, Optional
 
-from core.ingestion import process_pdf
+from core.ingestion import batch_ingest_folder, process_pdf
 from core.embeddings import embed_chunks
 from core.vector_db import VectorDB
 from core.retrieval import retrieve, DEFAULT_TOP_K, DEFAULT_MAX_DISTANCE
@@ -76,6 +76,10 @@ class RAGPipeline:
             source_filter=source_filter,
         )
         return generate_answer(question, chunks)
+
+    def ingest_folder(self, folder_path: str = "data") -> dict:
+        """Ingest all new PDFs from a folder into the shared vector store."""
+        return batch_ingest_folder(folder_path, vector_db=self.db)
 
     def document_count(self) -> int:
         """Total chunks currently stored across all documents."""
